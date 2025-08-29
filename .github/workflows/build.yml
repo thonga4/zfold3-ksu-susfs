@@ -1,0 +1,52 @@
+name: Build ZFold3 Kernel (SukiSU Ultra + SUSFS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      osrc_zip_url:
+        description: 'URL trực tiếp tới *_Opensource.zip* (SM-F926B Android 13)'
+        required: true
+      defconfig:
+        description: 'Defconfig trong tree OSRC (vd: vendor/q2q_defconfig)'
+        required: true
+        default: 'vendor/q2q_defconfig'
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison flex build-essential ccache git libssl-dev \
+            libncurses5-dev zstd rsync zip python3 wget curl bsdtar \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi
+
+      - name: Fetch LLVM (Clang 12)
+        run: |
+          mkdir -p llvm
+          curl -L -o /tmp/clang.tar.xz https://github.com/llvm/llvm-project/releases/download/llvmorg-12.0.1/clang+llvm-12.0.1-x86_64-linux-gnu-ubuntu-16.04.tar.xz
+          tar -xJf /tmp/clang.tar.xz --strip-components=1 -C llvm
+
+      - name: Download OSRC kernel source
+        env:
+          OSRC_ZIP_URL: ${{ inputs.osrc_zip_url }}
+          DEFCONFIG: ${{ inputs.defconfig }}
+        run: bash scripts/fetch_kernel.sh
+
+      - name: Apply patches (SukiSU + SUSFS)
+        run: bash scripts/apply_patches.sh
+
+      - name: Build
+        run: bash scripts/build.sh
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZFold3_SukiSU_SUSFS
+          path: |
+            ZFold3_SukiSU_SUSFS.zip
+            work/**/out/arch/arm64/boot/Image.gz-dtb
